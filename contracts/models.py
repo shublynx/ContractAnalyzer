@@ -3,6 +3,8 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.conf import settings
 
+from .utils import extract_text_from_pdf
+
 class User(AbstractUser):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     email = models.EmailField(unique=True)
@@ -18,6 +20,12 @@ class Contract(models.Model):
     name = models.CharField(max_length=255)
     raw_text = models.TextField(blank=True, null=True) # Where the extracted PDF text lives
     uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        # Only extract text if it's a new file or hasn't been extracted yet
+        if self.file and not self.raw_text:
+            self.raw_text = extract_text_from_pdf(self.file)
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.name} - {self.user.email}"
