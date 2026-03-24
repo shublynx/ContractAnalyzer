@@ -1,8 +1,8 @@
 from rest_framework import status, generics
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from .serializers import UserSerializer
-from .models import User
+from .serializers import UserSerializer, ContractSerializer
+from .models import User, Contract
 
 class RegisterView(generics.CreateAPIView):
     """
@@ -21,3 +21,11 @@ class UserDetailView(generics.RetrieveAPIView):
 
     def get_object(self):
         return self.request.user
+    
+class ContractListCreateView(generics.ListCreateAPIView):
+    serializer_class = ContractSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Security: Users should ONLY see their own contracts
+        return Contract.objects.filter(user=self.request.user)
