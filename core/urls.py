@@ -4,7 +4,7 @@ from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
 )
-from contracts.views import RegisterView, UserDetailView
+from contracts.views import RegisterView, UserDetailView, ContractListCreateView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -16,4 +16,7 @@ urlpatterns = [
     
     # User Profile (Verification)
     path('api/auth/me/', UserDetailView.as_view(), name='auth_me'),
+
+    # Contracts Endpoints
+    path('api/contracts/', ContractListCreateView.as_view(), name='contract-list-create'),
 ]
