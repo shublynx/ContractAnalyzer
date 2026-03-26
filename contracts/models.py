@@ -4,7 +4,7 @@ from django.contrib.auth.models import AbstractUser
 from django.conf import settings
 from django.db import transaction
 
-from .utils import extract_text_from_pdf, get_text_chunks, generate_gemini_embeddings
+# from .utils import extract_text_from_pdf, get_text_chunks, generate_gemini_embeddings
 
 class User(AbstractUser):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -29,28 +29,28 @@ class Contract(models.Model):
         super().save(*args, **kwargs)
 
         # Generate chunks if it don't exist
-        if self.raw_text and not self.chunks.exists():
-            # Wrap in a transaction for safety
-            with transaction.atomic():
-                # A. Slice the text
-                text_list = get_text_chunks(self.raw_text)
+        # if self.raw_text and not self.chunks.exists():
+        #     # Wrap in a transaction for safety
+        #     with transaction.atomic():
+        #         # A. Slice the text
+        #         text_list = get_text_chunks(self.raw_text)
                 
-                # B. Generate Vectors (The Gemini API Call)
-                # Note: Gemini allows up to 100 texts per batch
-                vectors = generate_gemini_embeddings(text_list)
+        #         # B. Generate Vectors (The Gemini API Call)
+        #         # Note: Gemini allows up to 100 texts per batch
+        #         vectors = generate_gemini_embeddings(text_list)
                 
-                # C. Prepare the Objects
-                chunk_objects = [
-                    ContractChunk(
-                        contract=self,
-                        content=text_list[i],
-                        embedding=vectors[i],
-                        chunk_index=i
-                    ) for i in range(len(text_list))
-                ]
+        #         # C. Prepare the Objects
+        #         chunk_objects = [
+        #             ContractChunk(
+        #                 contract=self,
+        #                 content=text_list[i],
+        #                 embedding=vectors[i],
+        #                 chunk_index=i
+        #             ) for i in range(len(text_list))
+        #         ]
                 
-                # D. High-Performance Bulk Insert
-                ContractChunk.objects.bulk_create(chunk_objects)
+        #         # D. High-Performance Bulk Insert
+        #         ContractChunk.objects.bulk_create(chunk_objects)
 
     def __str__(self):
         return f"{self.name} - {self.user.email}"
