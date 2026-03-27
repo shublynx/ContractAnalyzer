@@ -18,18 +18,31 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 import environ
 import os
 
-# Initialize env
 env = environ.Env()
 
-environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
+# Only try to read .env if it actually exists
+env_file = os.path.join(BASE_DIR, '.env')
+if os.path.exists(env_file):
+    environ.Env.read_env(env_file)
 
-SECRET_KEY = env('SECRET_KEY')
+# Provide DEFAULTS for variables that aren't critical for local/CI
+# This prevents the "ImproperlyConfigured" crash
+SECRET_KEY = env('SECRET_KEY', default='unsafe-secret-key-for-dev-only')
 DEBUG = env.bool('DEBUG', default=False)
 
-# REDIS
-REDIS_HOST = env('REDIS_HOST')
-REDIS_PORT = env('REDIS_PORT')
+# REDIS - Use the service name 'redis' as a default for Docker
+REDIS_HOST = env('REDIS_HOST', default='redis')
+REDIS_PORT = env.int('REDIS_PORT', default=6379)
 
+import dj_database_url
+DATABASES = {
+    'default': dj_database_url.config(
+        # Use the service name 'db' as a fallback default
+        default=env('DATABASE_URL', default='postgres://admin:password123@db:5432/contractiq'),
+        conn_max_age=600,
+        conn_health_checks=True,
+    )
+}
 
 
 
@@ -93,21 +106,7 @@ AUTH_USER_MODEL = 'contracts.User'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-import dj_database_url
-# This replaces the default SQLite settings
-# Configure the database connection using the dj_database_url utility
-DATABASES = {
-    'default': dj_database_url.config(
-        # 1. Pull the connection string from our .env file (postgres://...)
-        default=env('DATABASE_URL'),
-        
-        # 2. Keep the database connection open for 10 minutes to improve performance
-        conn_max_age=600,
-        
-        # 3. Automatically check if the connection is still alive before using it
-        conn_health_checks=True,
-    )
-}
+
 
 REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',

@@ -1,25 +1,34 @@
 services:
   db:
     image: ankane/pgvector:v0.5.1
-    # EXPLICIT BINDING: Force the host's loopback to talk to the container
-    ports:
-      - "127.0.0.1:5432:5432"
-    
     environment:
       POSTGRES_DB: contractiq
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: password123
-    
-    # Healthcheck: This allows other services (and you) to know 
-    # when the DB is actually ready for queries, not just 'running'
     healthcheck:
+      # This ensures Postgres is actually READY, not just "started"
       test: ["CMD-SHELL", "pg_isready -U admin -d contractiq"]
       interval: 5s
       timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis/redis-stack-server:latest
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
       retries: 5
 
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-volumes:
-  postgres_data:
+  web:
+    build: .
+    # In production, variables are injected by the host/CI, not a loose .env file
+    environment:
+      - DATABASE_URL=postgres://admin:password123@db:5432/contractiq
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy

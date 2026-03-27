@@ -1,51 +1,31 @@
-name: ContractAnalyzer Continuous Integration
+name: Django Production CI
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main, feature/* ]
+    branches: [ "main", "feature/*" ]
 
 jobs:
   test:
     runs-on: ubuntu-latest
-
-    # This spins up the actual Database for the tests to use
-    services:
-      postgres:
-        image: ankane/pgvector:v0.5.1
-        env:
-          POSTGRES_DB: contractiq_test
-          POSTGRES_USER: admin
-          POSTGRES_PASSWORD: password123
-        ports:
-          - 5432:5432
-        # Wait for Postgres to be 'Ready' before starting the Python job
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-
-      - name: Install Dependencies
+      - name: Build and Run Stack
+        # We use 'run' instead of 'exec'. This starts the container, 
+        # executes the command, and if it crashes, it shows the error immediately.
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          docker compose build
+          
+          echo "Running Migrations..."
+          docker compose run --rm -e DATABASE_URL=postgres://admin:password123@db:5432/contractiq web python manage.py migrate
+          
+          echo "Setting up Vectors..."
+          docker compose run --rm -e REDIS_HOST=redis web python manage.py setup_vectors
+          
+          echo "Running Tests..."
+          docker compose run --rm -e DATABASE_URL=postgres://admin:password123@db:5432/contractiq -e REDIS_HOST=redis web python manage.py test contracts
 
-      - name: Run Migrations & Tests
-        env:
-          # Tell Django to use the 'services' database above
-          DATABASE_URL: postgres://admin:password123@localhost:5432/contractiq_test
-          SECRET_KEY: ci-test-key-not-for-prod
-          DEBUG: True
-        run: |
-          python manage.py migrate
-          python manage.py test
+      - name: Show Logs on Failure
+        if: failure()
+        run: docker compose logs
