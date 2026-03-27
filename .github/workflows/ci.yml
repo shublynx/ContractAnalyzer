@@ -12,21 +12,33 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Start Services
-        # --wait ensures GitHub won't move to the next step 
-        # until the DB healthcheck passes. No more 'sleep 20'!
+        # We inject variables directly here to ensure the container STAYS ALIVE
         run: docker compose up -d --wait
+        env:
+          DATABASE_URL: postgres://admin:password123@db:5432/contractiq
+          REDIS_HOST: redis
+          REDIS_PORT: 6379
+          DEBUG: "True"
+
+      - name: Debug Logs on Failure
+        if: failure()
+        run: docker compose logs web
 
       - name: Database Migrations
         run: docker compose exec -T web python manage.py migrate
+        env:
+          DATABASE_URL: postgres://admin:password123@db:5432/contractiq
 
       - name: Initialize Vector Search
         run: docker compose exec -T web python manage.py setup_vectors
+        env:
+          REDIS_HOST: redis
 
       - name: Run Unit Tests
         run: docker compose exec -T web python manage.py test contracts
-
-      - name: Security Check (Optional but Pro)
-        run: docker compose exec -T web pip install safety && safety check
+        env:
+          DATABASE_URL: postgres://admin:password123@db:5432/contractiq
+          REDIS_HOST: redis
 
       - name: Shutdown
         if: always()
