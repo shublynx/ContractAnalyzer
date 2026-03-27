@@ -1,42 +1,34 @@
 services:
   db:
     image: ankane/pgvector:v0.5.1
-    ports:
-      - "5432:5432"
     environment:
       POSTGRES_DB: contractiq
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: password123
     healthcheck:
+      # This ensures Postgres is actually READY, not just "started"
       test: ["CMD-SHELL", "pg_isready -U admin -d contractiq"]
       interval: 5s
       timeout: 5s
-      retries: 5
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+      retries: 10
 
   redis:
     image: redis/redis-stack-server:latest
-    ports:
-      - "6379:6379"
-      - "8001:8001"
-    volumes:
-      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   web:
     build: .
-    volumes:
-      - .:/code
-    ports:
-      - "8000:8000"
-    env_file:
-      - .env
+    # In production, variables are injected by the host/CI, not a loose .env file
+    environment:
+      - DATABASE_URL=postgres://admin:password123@db:5432/contractiq
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     depends_on:
       db:
         condition: service_healthy
       redis:
-        condition: service_started
-
-volumes:
-  postgres_data:
-  redis_data:
+        condition: service_healthy
