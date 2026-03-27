@@ -2,14 +2,9 @@ name: Django CI
 
 on:
   push:
-    # Trigger on all your feature branches and main
-    branches: 
-      - main
-      - feature/*
+    branches: [ "main", "feature/*" ]
   pull_request:
-    # Trigger when you try to merge any feature branch into main
-    branches: 
-      - main
+    branches: [ "main" ]
 
 jobs:
   test:
@@ -19,23 +14,33 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Create Dummy Env for CI
+        # CI needs these variables to start the Django container
+        run: |
+          echo "DATABASE_URL=postgres://admin:password123@db:5432/contractiq" > .env
+          echo "REDIS_HOST=redis" >> .env
+          echo "REDIS_PORT=6379" >> .env
+          echo "GEMINI_API_KEY=mock_key_for_testing" >> .env
+
       - name: Build and Start Stack
-        # Use the --wait flag to ensure DB and Redis are healthy 
-        # before the next step runs
-        run: docker compose up --build -d --wait
+        run: docker compose up --build -d
+
+      - name: Wait for services
+        run: |
+          echo "Waiting 20 seconds for DB and Redis to stabilize..."
+          sleep 20
+          docker compose ps
+          docker compose logs web
 
       - name: Run Migrations
-        # Inside the 'web' container, prepare the PG database
         run: docker compose exec web python manage.py migrate
 
       - name: Initialize Redis Vector Index
-        # This calls your custom command to prevent 'No such index' errors
         run: docker compose exec web python manage.py setup_vectors
 
       - name: Run Unit Tests
-        # Run the tests we just verified locally on your HP Laptop
         run: docker compose exec web python manage.py test contracts
 
-      - name: Cleanup Containers
+      - name: Cleanup
         if: always()
         run: docker compose down

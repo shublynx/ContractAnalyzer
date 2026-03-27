@@ -1,5 +1,6 @@
 import numpy as np
 import hashlib
+import os
 from ..utils.redis_client import redis_client
 from redis.commands.search.query import Query
 
@@ -31,22 +32,16 @@ class SemanticCache:
                 
                 if score < cls.THRESHOLD:
                     print(f"--- [CACHE HIT] Score: {score:.4f} ---")
-                    
-                    # Try every possible way the RediSearch library returns the field
-                    # 1. Attribute access: doc.answer
-                    # 2. Dictionary access: doc['answer']
-                    # 3. Double-underscore dict: doc.__dict__['answer']
-                    
+                    # Try both attribute and dictionary access
                     answer = getattr(doc, 'answer', None)
                     if not answer and hasattr(doc, '__dict__'):
                         answer = doc.__dict__.get('answer')
-                    
                     return answer
-                    
             return None
         except Exception as e:
             print(f"Redis Search Error: {e}")
             return None
+
     @classmethod
     def set_hit(cls, question, answer, vector):
         question_hash = hashlib.md5(question.encode()).hexdigest()
@@ -59,7 +54,6 @@ class SemanticCache:
         }
         
         try:
-            # We use hset to match the HASH index type in our setup command
             redis_client.hset(key, mapping=mapping)
             print(f"--- [CACHE SAVED] Question indexed in Redis ---")
         except Exception as e:

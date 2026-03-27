@@ -1,9 +1,8 @@
 services:
-  # DB with Vector support
   db:
     image: ankane/pgvector:v0.5.1
     ports:
-      - "127.0.0.1:5432:5432"
+      - "5432:5432"
     environment:
       POSTGRES_DB: contractiq
       POSTGRES_USER: admin
@@ -16,26 +15,22 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  # Redis with Vector Search (Redis Stack)
   redis:
     image: redis/redis-stack-server:latest
     ports:
-      - "127.0.0.1:6379:6379"
-      - "127.0.0.1:8001:8001" # Redis Insight UI
+      - "6379:6379"
+      - "8001:8001"
     volumes:
       - redis_data:/data
 
-  # Your Django App
   web:
     build: .
     volumes:
       - .:/code
     ports:
       - "8000:8000"
-    environment:
-      - DATABASE_URL=postgres://admin:password123@db:5432/contractiq
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
+    env_file:
+      - .env
     depends_on:
       db:
         condition: service_healthy
