@@ -11,35 +11,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Start Services
-        # We inject variables directly here to ensure the container STAYS ALIVE
-        run: docker compose up -d --wait
-        env:
-          DATABASE_URL: postgres://admin:password123@db:5432/contractiq
-          REDIS_HOST: redis
-          REDIS_PORT: 6379
-          DEBUG: "True"
+      - name: Build and Run Stack
+        # We use 'run' instead of 'exec'. This starts the container, 
+        # executes the command, and if it crashes, it shows the error immediately.
+        run: |
+          docker compose build
+          
+          echo "Running Migrations..."
+          docker compose run --rm -e DATABASE_URL=postgres://admin:password123@db:5432/contractiq web python manage.py migrate
+          
+          echo "Setting up Vectors..."
+          docker compose run --rm -e REDIS_HOST=redis web python manage.py setup_vectors
+          
+          echo "Running Tests..."
+          docker compose run --rm -e DATABASE_URL=postgres://admin:password123@db:5432/contractiq -e REDIS_HOST=redis web python manage.py test contracts
 
-      - name: Debug Logs on Failure
+      - name: Show Logs on Failure
         if: failure()
-        run: docker compose logs web
-
-      - name: Database Migrations
-        run: docker compose exec -T web python manage.py migrate
-        env:
-          DATABASE_URL: postgres://admin:password123@db:5432/contractiq
-
-      - name: Initialize Vector Search
-        run: docker compose exec -T web python manage.py setup_vectors
-        env:
-          REDIS_HOST: redis
-
-      - name: Run Unit Tests
-        run: docker compose exec -T web python manage.py test contracts
-        env:
-          DATABASE_URL: postgres://admin:password123@db:5432/contractiq
-          REDIS_HOST: redis
-
-      - name: Shutdown
-        if: always()
-        run: docker compose down
+        run: docker compose logs
