@@ -1,51 +1,41 @@
-name: ContractAnalyzer Continuous Integration
+name: Django CI
 
 on:
   push:
-    branches: [ main ]
+    # Trigger on all your feature branches and main
+    branches: 
+      - main
+      - feature/*
   pull_request:
-    branches: [ main, feature/* ]
+    # Trigger when you try to merge any feature branch into main
+    branches: 
+      - main
 
 jobs:
   test:
     runs-on: ubuntu-latest
-
-    # This spins up the actual Database for the tests to use
-    services:
-      postgres:
-        image: ankane/pgvector:v0.5.1
-        env:
-          POSTGRES_DB: contractiq_test
-          POSTGRES_USER: admin
-          POSTGRES_PASSWORD: password123
-        ports:
-          - 5432:5432
-        # Wait for Postgres to be 'Ready' before starting the Python job
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
+    
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
+      - name: Build and Start Stack
+        # Use the --wait flag to ensure DB and Redis are healthy 
+        # before the next step runs
+        run: docker compose up --build -d --wait
 
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+      - name: Run Migrations
+        # Inside the 'web' container, prepare the PG database
+        run: docker compose exec web python manage.py migrate
 
-      - name: Run Migrations & Tests
-        env:
-          # Tell Django to use the 'services' database above
-          DATABASE_URL: postgres://admin:password123@localhost:5432/contractiq_test
-          SECRET_KEY: ci-test-key-not-for-prod
-          DEBUG: True
-        run: |
-          python manage.py migrate
-          python manage.py test
+      - name: Initialize Redis Vector Index
+        # This calls your custom command to prevent 'No such index' errors
+        run: docker compose exec web python manage.py setup_vectors
+
+      - name: Run Unit Tests
+        # Run the tests we just verified locally on your HP Laptop
+        run: docker compose exec web python manage.py test contracts
+
+      - name: Cleanup Containers
+        if: always()
+        run: docker compose down

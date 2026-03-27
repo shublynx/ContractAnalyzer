@@ -1,23 +1,18 @@
 import numpy as np
+import hashlib
 from ..utils.redis_client import redis_client
 from redis.commands.search.query import Query
 
 class SemanticCache:
     INDEX = "idx:contract_cache"
-    # 0.1 is very strict (near-identical). 
-    # 0.2 to 0.25 is usually better for "similar" legal questions.
     THRESHOLD = 0.2  
+
+    def __init__(self):
+        self.client = redis_client
 
     @classmethod
     def get_hit(cls, vector):
-        """
-        Searches Redis for the closest existing question vector.
-        Uses K-Nearest Neighbors (KNN) to find the top 1 match.
-        """
-        # The query string for Redis Stack Vector Search
-        # @vector is the field name we defined in init_redis.py
         query_str = f"*=>[KNN 1 @vector $vec as score]"
-        
         q = (
             Query(query_str)
             .sort_by("score")
@@ -26,41 +21,45 @@ class SemanticCache:
         )
         
         try:
-            # We must pass the vector as bytes for the Redis search
             results = redis_client.ft(cls.INDEX).search(
                 q, {"vec": vector.tobytes()}
             )
             
             if results.docs:
-                score = float(results.docs[0].score)
-                # In Cosine distance, smaller score = more similar
+                doc = results.docs[0]
+                score = float(doc.score)
+                
                 if score < cls.THRESHOLD:
                     print(f"--- [CACHE HIT] Score: {score:.4f} ---")
-                    return results.docs[0].answer
+                    
+                    # Try every possible way the RediSearch library returns the field
+                    # 1. Attribute access: doc.answer
+                    # 2. Dictionary access: doc['answer']
+                    # 3. Double-underscore dict: doc.__dict__['answer']
+                    
+                    answer = getattr(doc, 'answer', None)
+                    if not answer and hasattr(doc, '__dict__'):
+                        answer = doc.__dict__.get('answer')
+                    
+                    return answer
                     
             return None
         except Exception as e:
             print(f"Redis Search Error: {e}")
             return None
-
     @classmethod
     def set_hit(cls, question, answer, vector):
-        """
-        Saves a new Q&A pair to the Redis Vector Index.
-        """
-        # Create a unique key using a simple hash of the question
-        # This prevents duplicate keys for the exact same string
-        key = f"cache:{hash(question)}"
+        question_hash = hashlib.md5(question.encode()).hexdigest()
+        key = f"cache:{question_hash}"
         
         mapping = {
             "question": question,
             "answer": answer,
-            "vector": vector.tobytes() # Vectors MUST be saved as bytes
+            "vector": vector.tobytes()
         }
         
         try:
-            # HSET saves the data as a Redis Hash
-            # Because we used IndexType.HASH in init_redis, it gets indexed automatically
+            # We use hset to match the HASH index type in our setup command
             redis_client.hset(key, mapping=mapping)
             print(f"--- [CACHE SAVED] Question indexed in Redis ---")
         except Exception as e:
